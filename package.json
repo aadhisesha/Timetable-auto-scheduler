@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "jspdf": "^3.0.1",
+    "jspdf-autotable": "^5.0.2",
+    "mammoth": "^1.9.1",
+    "multer": "^2.0.1",
+    "pdf-parse": "^1.1.1",
+    "react-toastify": "^11.0.5",
+    "xlsx": "^0.18.5"
+  }
+}

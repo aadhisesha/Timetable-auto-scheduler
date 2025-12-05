@@ -216,3 +216,14 @@ exports.deleteSubjectMapping = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Delete all subject mappings
+exports.deleteAllSubjectMappings = async (req, res) => {
+  try {
+    const result = await SubjectMapping.deleteMany({});
+    res.status(200).json({ message: `Deleted ${result.deletedCount} subject mappings` });
+  } catch (error) {
+    console.error('Error deleting all subject mappings:', error);
+    res.status(500).json({ error: error.message });
+  }
+};

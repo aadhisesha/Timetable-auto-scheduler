@@ -103,4 +103,29 @@ export const facultyService = {
     const res = await api.get(`/timetable-coordinator/subject-mappings`);
     return res.data;
   },
+  deleteSubjectMapping: async (id) => {
+    const res = await api.delete(`/timetable-coordinator/subject-mappings/${id}`);
+    return res.data;
+  },
+  deleteAllSubjectMappings: async () => {
+    const res = await api.delete(`/timetable-coordinator/subject-mappings`);
+    return res.data;
+  },
+  exportSubjectMappingsAsCSV: (mappings, faculties, courses) => {
+    // Build CSV content with headers: Faculty ID, Faculty Name, Subject Code, Subject Name, Role
+    const headers = ['Faculty ID', 'Faculty Name', 'Subject Code', 'Subject Name', 'Role'];
+    const rows = mappings.map(m => {
+      const faculty = faculties.find(f => (f.userId || f.user?.userId) === m.facultyId) || {};
+      const course = courses.find(c => c.code === m.courseCode) || {};
+      return [
+        m.facultyId || '',
+        faculty.name || '',
+        m.courseCode || '',
+        course.name || '',
+        m.role || ''
+      ];
+    });
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    return csvContent;
+  },
 }; 

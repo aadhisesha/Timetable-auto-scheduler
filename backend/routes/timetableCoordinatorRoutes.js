@@ -14,7 +14,8 @@ const {
   getSubjectMappingsByFaculty,
   getSubjectMappingsByCourse,
   updateSubjectMapping,
-  deleteSubjectMapping
+  deleteSubjectMapping,
+  deleteAllSubjectMappings
 } = require('../controllers/coordinatorController');
 
 const router = express.Router();
@@ -29,6 +30,7 @@ router.post('/assignments', uploadAssignments);
 router.post('/subject-mappings', createSubjectMapping);
 router.post('/subject-mappings/bulk', bulkCreateSubjectMappings);
 router.get('/subject-mappings', getAllSubjectMappings);
+router.delete('/subject-mappings', deleteAllSubjectMappings);
 router.get('/subject-mappings/faculty/:facultyId', getSubjectMappingsByFaculty);
 router.get('/subject-mappings/course/:courseCode', getSubjectMappingsByCourse);
 router.put('/subject-mappings/:id', updateSubjectMapping);

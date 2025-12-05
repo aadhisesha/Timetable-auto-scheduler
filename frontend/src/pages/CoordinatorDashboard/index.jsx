@@ -6,6 +6,8 @@ import { timetableService } from '../../services/timetableService';
 import { courseService } from '../../services/courseService';
 import { facultyService } from '../../services/facultyService';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const ROOM_INFRA = {
   UG: {
@@ -455,7 +457,9 @@ const CoordinatorDashboard = () => {
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
   const [selectedCourseCode, setSelectedCourseCode] = useState('');
   const [selectedRole, setSelectedRole] = useState(ROLES[0]);
-  const [manualMappings, setManualMappings] = useState([]); // [{facultyId, courseCode, role}]
+  const [selectedBatch, setSelectedBatch] = useState('');
+  const [selectedSemester, setSelectedSemester] = useState('');
+  const [manualMappings, setManualMappings] = useState([]); // [{facultyId, courseCode, role, batch, semester}]
   const [manualMsg, setManualMsg] = useState('');
   const [manualLoading, setManualLoading] = useState(false);
 
@@ -474,6 +478,7 @@ const CoordinatorDashboard = () => {
     facultyService.getFacultySummary().then(res => setFacultyCount(res.totalFaculties)).catch(() => setFacultyCount(0));
     fetchAssignments();
   }, []);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const fetchAssignments = async () => {
     try {
@@ -484,21 +489,99 @@ const CoordinatorDashboard = () => {
     }
   };
 
+  const handleDeleteMapping = async (id) => {
+    if (!window.confirm('Are you sure you want to remove this subject assignment?')) return;
+    try {
+      await facultyService.deleteSubjectMapping(id);
+      await fetchAssignments();
+    } catch (err) {
+      console.error('Failed to delete mapping', err);
+      setManualMsg('Failed to delete mapping.');
+    }
+  };
+
+  const handleExportSubjectMappingsExcel = () => {
+    if (allAssignments.length === 0) {
+      setManualMsg('No mappings to export');
+      return;
+    }
+    const rows = allAssignments.map(m => {
+      const faculty = faculties.find(f => (f.userId || f.user?.userId) === m.facultyId) || {};
+      const course = courses.find(c => c.code === m.courseCode) || {};
+      return {
+        'Faculty ID': m.facultyId || '',
+        'Faculty Name': faculty.name || '',
+        'Subject Code': m.courseCode || '',
+        'Subject Name': course.name || '',
+        'Role': m.role || ''
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Subject Mappings');
+    XLSX.writeFile(wb, 'subject_mappings.xlsx');
+  };
+
+  const handleExportSubjectMappingsPDF = () => {
+    if (allAssignments.length === 0) {
+      setManualMsg('No mappings to export');
+      return;
+    }
+    const doc = new jsPDF();
+    const rows = allAssignments.map(m => {
+      const faculty = faculties.find(f => (f.userId || f.user?.userId) === m.facultyId) || {};
+      const course = courses.find(c => c.code === m.courseCode) || {};
+      return [
+        m.facultyId || '',
+        faculty.name || '',
+        m.courseCode || '',
+        course.name || '',
+        m.role || ''
+      ];
+    });
+    autoTable(doc, {
+      head: [['Faculty ID', 'Faculty Name', 'Subject Code', 'Subject Name', 'Role']],
+      body: rows
+    });
+    doc.save('subject_mappings.pdf');
+  };
+
   // Manual subject mapping handlers
   const handleAddMappingRow = () => {
-    if (selectedFacultyId && selectedCourseCode && selectedRole) {
-      const isDuplicate = manualMappings.some(m => m.facultyId === selectedFacultyId && m.courseCode === selectedCourseCode && m.role === selectedRole);
-      if (isDuplicate) {
-        setManualMsg('This mapping already exists.');
+    if (selectedFacultyId && selectedCourseCode && selectedRole && selectedBatch && selectedSemester) {
+      // Check for duplicates in the current manual mappings list
+      const isDuplicateInList = manualMappings.some(
+        m => m.facultyId === selectedFacultyId && m.courseCode === selectedCourseCode && m.role === selectedRole
+      );
+      if (isDuplicateInList) {
+        setManualMsg('⚠️ This mapping already exists in the list.');
         return;
       }
-      setManualMappings([...manualMappings, { facultyId: selectedFacultyId, courseCode: selectedCourseCode, role: selectedRole }]);
+
+      // Check for duplicates in existing database mappings
+      const isDuplicateInDB = allAssignments.some(
+        m => m.facultyId === selectedFacultyId && m.courseCode === selectedCourseCode && m.role === selectedRole
+      );
+      if (isDuplicateInDB) {
+        setManualMsg('⚠️ This faculty is already assigned to this subject with this role. Please select a different combination.');
+        return;
+      }
+
+      setManualMappings([...manualMappings, { 
+        facultyId: selectedFacultyId, 
+        courseCode: selectedCourseCode, 
+        role: selectedRole,
+        batch: selectedBatch,
+        semester: selectedSemester
+      }]);
       setSelectedFacultyId('');
       setSelectedCourseCode('');
       setSelectedRole(ROLES[0]);
+      setSelectedBatch('');
+      setSelectedSemester('');
       setManualMsg('');
     } else {
-      setManualMsg('Please select faculty, course, and role.');
+      setManualMsg('Please fill in all fields: Faculty, Course, Role, Batch, and Semester.');
     }
   };
 
@@ -517,6 +600,27 @@ const CoordinatorDashboard = () => {
         setManualLoading(false);
         return;
       }
+
+      // Check for duplicates with existing mappings in the database
+      const duplicates = [];
+      for (const newMapping of manualMappings) {
+        const isDuplicate = allAssignments.some(
+          existing => 
+            existing.facultyId === newMapping.facultyId && 
+            existing.courseCode === newMapping.courseCode && 
+            existing.role === newMapping.role
+        );
+        if (isDuplicate) {
+          duplicates.push(`${newMapping.facultyId} - ${newMapping.courseCode} - ${newMapping.role}`);
+        }
+      }
+
+      if (duplicates.length > 0) {
+        setManualMsg(`⚠️ The following mappings already exist (duplicates):\n${duplicates.join('\n')}\n\nPlease remove these from the list before submitting.`);
+        setManualLoading(false);
+        return;
+      }
+
       await facultyService.createSubjectMappings(manualMappings);
       setManualMsg('Subject mappings created successfully!');
       setManualMappings([]);
@@ -570,7 +674,7 @@ const CoordinatorDashboard = () => {
 
           if (rows.length === 0) continue;
 
-          // Find header row
+          // Find header row with expected columns
           let headerRowIndex = -1;
           let mainHeaders = [];
           const mainHeaderKeywords = ['Faculty ID', 'Course Code'];
@@ -589,6 +693,9 @@ const CoordinatorDashboard = () => {
           const facultyIdIndex = compositeHeaders.findIndex(h => h.includes('faculty id') || h.includes('csid'));
           const courseCodeIndex = compositeHeaders.findIndex(h => h.includes('course code'));
           const roleIndex = compositeHeaders.findIndex(h => h.includes('role'));
+          // Batch and semester are optional in the file (can be derived from course), but we'll parse them if present
+          const batchIndex = compositeHeaders.findIndex(h => h.includes('batch'));
+          const semesterIndex = compositeHeaders.findIndex(h => h.includes('semester'));
 
           for (let i = headerRowIndex + 1; i < rows.length; i++) {
             const row = rows[i];
@@ -600,10 +707,17 @@ const CoordinatorDashboard = () => {
 
             if (!facultyId || !courseCode || !role) continue;
 
+            // Get batch and semester from course or from file
+            const courseObj = courses.find(c => c.code === String(courseCode).trim());
+            const batch = batchIndex !== -1 && row[batchIndex] ? String(row[batchIndex]).trim() : (courseObj?.batches || 1);
+            const semester = semesterIndex !== -1 && row[semesterIndex] ? String(row[semesterIndex]).trim() : (courseObj?.semester || 'Unknown');
+
             allMappings.push({
               facultyId: String(facultyId).trim(),
               courseCode: String(courseCode).trim(),
-              role: String(role).trim()
+              role: String(role).trim(),
+              batch,
+              semester
             });
           }
         } catch (err) {
@@ -615,10 +729,46 @@ const CoordinatorDashboard = () => {
       if (allMappings.length === 0) {
         setUploadResults({ successful: 0, failed: 1, error: 'No valid mappings found in the file.' });
       } else {
-        // Send mappings to backend
-        const result = await facultyService.bulkCreateSubjectMappings(allMappings);
-        setUploadResults({ successful: result.successful || allMappings.length, failed: result.failed || 0 });
-        fetchAssignments();
+        // Check for duplicates with existing mappings in the database
+        const duplicates = [];
+        const validMappings = [];
+        for (const mapping of allMappings) {
+          const isDuplicate = allAssignments.some(
+            existing => 
+              existing.facultyId === mapping.facultyId && 
+              existing.courseCode === mapping.courseCode && 
+              existing.role === mapping.role
+          );
+          if (isDuplicate) {
+            duplicates.push(`${mapping.facultyId}-${mapping.courseCode}-${mapping.role}`);
+          } else {
+            validMappings.push(mapping);
+          }
+        }
+
+        if (validMappings.length === 0) {
+          setUploadResults({ 
+            successful: 0, 
+            failed: allMappings.length, 
+            error: `All ${allMappings.length} mappings in the file already exist.` 
+          });
+        } else {
+          // Send only valid (non-duplicate) mappings to backend
+          // Extract just the core fields for submission (facultyId, courseCode, role)
+          const mappingsToSubmit = validMappings.map(m => ({
+            facultyId: m.facultyId,
+            courseCode: m.courseCode,
+            role: m.role
+          }));
+          const result = await facultyService.bulkCreateSubjectMappings(mappingsToSubmit);
+          const failedCount = (result.failed || 0) + duplicates.length;
+          setUploadResults({ 
+            successful: result.successful || validMappings.length, 
+            failed: failedCount,
+            duplicates: duplicates.length > 0 ? duplicates : undefined
+          });
+          fetchAssignments();
+        }
       }
     } catch (err) {
       setUploadResults({ successful: 0, failed: 1, error: err.message });
@@ -667,7 +817,7 @@ const CoordinatorDashboard = () => {
                   <option value="">Select Faculty</option>
                   {faculties.map(f => (
                     <option key={f._id} value={f.userId}>
-                      {f.userId} - {f.email}
+                      {f.userId} - {f.name} - {f.email}
                     </option>
                   ))}
                 </select>
@@ -676,7 +826,15 @@ const CoordinatorDashboard = () => {
                 <label className="block text-gray-700 mb-2">Select Course</label>
                 <select 
                   value={selectedCourseCode} 
-                  onChange={e => setSelectedCourseCode(e.target.value)} 
+                  onChange={e => {
+                    setSelectedCourseCode(e.target.value);
+                    // Auto-populate batch and semester from selected course
+                    const course = courses.find(c => c.code === e.target.value);
+                    if (course) {
+                      setSelectedBatch(String(course.batches));
+                      setSelectedSemester(course.semester);
+                    }
+                  }} 
                   className="w-full border rounded px-3 py-2 text-black"
                 >
                   <option value="">Select Course</option>
@@ -699,6 +857,28 @@ const CoordinatorDashboard = () => {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="block text-gray-700 mb-2">Batch</label>
+                <input
+                  type="text"
+                  value={selectedBatch}
+                  onChange={e => setSelectedBatch(e.target.value)}
+                  placeholder="e.g., 1, 2, 3"
+                  className="w-full border rounded px-3 py-2 text-black"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-gray-700 mb-2">Semester</label>
+                <input
+                  type="text"
+                  value={selectedSemester}
+                  onChange={e => setSelectedSemester(e.target.value)}
+                  placeholder="e.g., 1, 2, 3, 4"
+                  className="w-full border rounded px-3 py-2 text-black"
+                />
+              </div>
               <div className="flex items-end">
                 <button 
                   type="button" 
@@ -710,6 +890,36 @@ const CoordinatorDashboard = () => {
               </div>
             </div>
 
+            {/* Preview of selected values */}
+            {(selectedFacultyId || selectedCourseCode) && (
+              <div className="bg-blue-50 p-4 rounded border border-blue-200">
+                <h4 className="font-semibold text-black mb-2">Preview:</h4>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm text-black">
+                  <div>
+                    <span className="font-semibold">Faculty ID:</span> {selectedFacultyId || '-'}
+                  </div>
+                  <div>
+                    <span className="font-semibold">Faculty Name:</span> {faculties.find(f => f.userId === selectedFacultyId)?.name || '-'}
+                  </div>
+                  <div>
+                    <span className="font-semibold">Course Code:</span> {selectedCourseCode || '-'}
+                  </div>
+                  <div>
+                    <span className="font-semibold">Course Name:</span> {courses.find(c => c.code === selectedCourseCode)?.name || '-'}
+                  </div>
+                  <div>
+                    <span className="font-semibold">Semester:</span> {selectedSemester || '-'}
+                  </div>
+                  <div>
+                    <span className="font-semibold">Batch:</span> {selectedBatch || '-'}
+                  </div>
+                  <div>
+                    <span className="font-semibold">Role:</span> {selectedRole || '-'}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Mappings Table */}
             <div className="mt-4">
               <h3 className="text-md font-semibold text-black mb-2">Mappings to be Created</h3>
@@ -717,32 +927,44 @@ const CoordinatorDashboard = () => {
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="border px-2 py-1">Faculty ID</th>
+                    <th className="border px-2 py-1">Faculty Name</th>
                     <th className="border px-2 py-1">Course Code</th>
+                    <th className="border px-2 py-1">Course Name</th>
+                    <th className="border px-2 py-1">Semester</th>
+                    <th className="border px-2 py-1">Batch</th>
                     <th className="border px-2 py-1">Role</th>
                     <th className="border px-2 py-1">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {manualMappings.length > 0 ? (
-                    manualMappings.map((row, idx) => (
-                      <tr key={idx}>
-                        <td className="border px-2 py-1">{row.facultyId}</td>
-                        <td className="border px-2 py-1">{row.courseCode}</td>
-                        <td className="border px-2 py-1">{row.role}</td>
-                        <td className="border px-2 py-1">
-                          <button 
-                            type="button"
-                            onClick={() => handleRemoveMappingRow(idx)}
-                            className="text-red-600 font-bold hover:text-red-800"
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    manualMappings.map((row, idx) => {
+                      const faculty = faculties.find(f => f.userId === row.facultyId) || {};
+                      const course = courses.find(c => c.code === row.courseCode) || {};
+                      return (
+                        <tr key={idx}>
+                          <td className="border px-2 py-1">{row.facultyId}</td>
+                          <td className="border px-2 py-1">{faculty.name || '-'}</td>
+                          <td className="border px-2 py-1">{row.courseCode}</td>
+                          <td className="border px-2 py-1">{course.name || '-'}</td>
+                          <td className="border px-2 py-1">{row.semester}</td>
+                          <td className="border px-2 py-1">{row.batch}</td>
+                          <td className="border px-2 py-1">{row.role}</td>
+                          <td className="border px-2 py-1">
+                            <button 
+                              type="button"
+                              onClick={() => handleRemoveMappingRow(idx)}
+                              className="text-red-600 font-bold hover:text-red-800"
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
-                      <td colSpan={4} className="border px-2 py-1 text-center text-gray-500">
+                      <td colSpan={8} className="border px-2 py-1 text-center text-gray-500">
                         No mappings added yet
                       </td>
                     </tr>
@@ -765,7 +987,8 @@ const CoordinatorDashboard = () => {
         <section className="bg-white rounded-lg shadow p-6 mt-8">
           <h2 className="text-xl font-semibold text-black mb-4">Upload and Assign Faculty (Excel)</h2>
           <p className="text-sm text-gray-600 mb-4">
-            Upload an Excel file with columns: Faculty ID (csXXX), Course Code, Role. This will create subject-faculty mappings.
+            Upload an Excel file with columns: Faculty ID (csXXX), Faculty Name, Course Code, Course Name, Role, Batch (optional), Semester (optional). 
+            If Batch and Semester are not provided, they will be auto-populated from the course master data.
           </p>
           <input 
             type="file" 
@@ -776,10 +999,13 @@ const CoordinatorDashboard = () => {
           {uploadResults && (
             <div className="mt-2">
               {uploadResults.successful > 0 && (
-                <p className="text-green-700">Successfully created {uploadResults.successful} subject mappings.</p>
+                <p className="text-green-700">✓ Successfully created {uploadResults.successful} subject mappings.</p>
+              )}
+              {uploadResults.duplicates > 0 && (
+                <p className="text-yellow-700">⚠️ {uploadResults.duplicates} mappings were skipped (already exist).</p>
               )}
               {uploadResults.failed > 0 && (
-                <p className="text-red-700">Failed to create {uploadResults.failed} mappings.</p>
+                <p className="text-red-700">✗ Failed to create {uploadResults.failed} mappings.</p>
               )}
               {uploadResults.error && (
                 <p className="text-red-700">Error: {uploadResults.error}</p>
@@ -790,6 +1016,68 @@ const CoordinatorDashboard = () => {
         {/* Subject Mappings Table */}
         <section className="bg-white rounded-lg shadow p-6 mt-8">
           <h2 className="text-xl font-semibold text-black mb-4">Subject Mappings</h2>
+            <div className="flex justify-end gap-2 mb-4">
+              <button
+                onClick={handleExportSubjectMappingsExcel}
+                disabled={allAssignments.length === 0}
+                className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 disabled:bg-gray-400"
+              >
+                Export Excel
+              </button>
+              <button
+                onClick={handleExportSubjectMappingsPDF}
+                disabled={allAssignments.length === 0}
+                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:bg-gray-400"
+              >
+                Export PDF
+              </button>
+              <button
+                onClick={async () => {
+                  if (!window.confirm('Are you sure you want to remove ALL subject mappings? This action cannot be undone.')) return;
+                  setDeletingAll(true);
+                  setManualMsg('');
+                  try {
+                    const res = await facultyService.deleteAllSubjectMappings();
+                    console.log('Bulk delete response:', res);
+                    setManualMsg(res.message || 'All mappings deleted');
+                    await fetchAssignments();
+                  } catch (err) {
+                    console.error('Bulk delete failed, falling back to per-item deletion', err);
+                    // fallback: delete one-by-one
+                    try {
+                      const items = allAssignments.slice();
+                      let success = 0;
+                      let failed = 0;
+                      for (const it of items) {
+                        try {
+                          const id = it._id || it.id;
+                          if (!id) {
+                            failed++;
+                            continue;
+                          }
+                          await facultyService.deleteSubjectMapping(id);
+                          success++;
+                        } catch (err2) {
+                          console.error('Failed deleting mapping item', it, err2);
+                          failed++;
+                        }
+                      }
+                      setManualMsg(`Deleted ${success} mappings. ${failed} failed.`);
+                      await fetchAssignments();
+                    } catch (err3) {
+                      console.error('Fallback deletion also failed', err3);
+                      setManualMsg('Failed to delete mappings. Check console for details.');
+                    }
+                  } finally {
+                    setDeletingAll(false);
+                  }
+                }}
+                disabled={deletingAll}
+                className={`px-3 py-1 rounded ${deletingAll ? 'bg-gray-400 text-white' : 'bg-red-600 text-white hover:bg-red-700'}`}
+              >
+                {deletingAll ? 'Removing...' : 'Remove All'}
+              </button>
+            </div>
           <div className="max-h-96 overflow-y-auto">
             <table className="min-w-full bg-white border border-gray-300 text-black">
               <thead className="bg-gray-50">
@@ -810,12 +1098,20 @@ const CoordinatorDashboard = () => {
                     const courseName = course.name || item.courseName || '';
                     return (
                       <tr key={item._id || item.id || `${item.facultyId}-${item.courseCode}-${item.role}`}>
-                        <td className="border px-2 py-1">{item.facultyId}</td>
-                        <td className="border px-2 py-1">{facultyName}</td>
-                        <td className="border px-2 py-1">{item.courseCode}</td>
-                        <td className="border px-2 py-1">{courseName}</td>
-                        <td className="border px-2 py-1">{item.role}</td>
-                      </tr>
+                          <td className="border px-2 py-1">{item.facultyId}</td>
+                          <td className="border px-2 py-1">{facultyName}</td>
+                          <td className="border px-2 py-1">{item.courseCode}</td>
+                          <td className="border px-2 py-1">{courseName}</td>
+                          <td className="border px-2 py-1">{item.role}</td>
+                          <td className="border px-2 py-1">
+                            <button
+                              onClick={() => handleDeleteMapping(item._id || item.id)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
                     );
                   })
                 ) : (

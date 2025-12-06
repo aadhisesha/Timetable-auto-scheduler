@@ -14,7 +14,6 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   if (allowedRoles.length > 0 && !allowedRoles.includes(user?.role)) {
     // Redirect to appropriate dashboard if role is not allowed
     const dashboardRoutes = {
-      admin: '/admin-dashboard',
       faculty: '/faculty-dashboard',
       hod: '/hod-dashboard',
       coordinator: '/coordinator-dashboard'

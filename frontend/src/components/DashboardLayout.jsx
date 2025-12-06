@@ -12,12 +12,6 @@ const DashboardLayout = ({ children, role, title }) => {
 
   const getMenuItems = () => {
     switch (role) {
-      case 'admin':
-        return [
-          { label: 'Upload Electives', path: '/admin/electives' },
-          { label: 'System Management', path: '/admin/system' },
-          { label: 'Reports', path: '/admin/reports' }
-        ];
       case 'faculty':
         return [
           { label: 'Submit Preferences', path: '/faculty/preferences' },

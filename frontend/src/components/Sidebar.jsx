@@ -43,15 +43,6 @@ const Sidebar = () => {
       )
     },
     {
-      name: 'Faculty Management',
-      path: '/admin/faculties',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M12 14v7" />
-        </svg>
-      )
-    },
-    {
       name: 'Elective Submission',
       path: '/elective-submission',
       icon: (
@@ -89,13 +80,7 @@ const Sidebar = () => {
               <div className="text-white font-bold text-xl">TMS</div>
             </div>
             <nav className="mt-5 flex-1 px-2 space-y-1">
-              {navigation
-                .filter(item => {
-                  // Hide Timetable Builder link for admin users
-                  if (item.name === 'Timetable Builder' && user?.role === 'admin') return false;
-                  return true;
-                })
-                .map((item) => (
+              {navigation.map((item) => (
                   <NavLink
                     key={item.name}
                     to={item.path}

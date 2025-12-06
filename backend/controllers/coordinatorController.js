@@ -20,7 +20,13 @@ exports.createSubjectMapping = async (req, res) => {
 
     for (const mapping of mappings) {
       try {
-        const { facultyId, courseCode, role } = mapping;
+        const { facultyId, courseCode, role, batch, semester, courseType } = mapping;
+        
+        // Ensure batch and semester are strings (preserve actual values, default to empty string if undefined/null)
+        const batchValue = (batch !== undefined && batch !== null) ? String(batch).trim() : '';
+        const semesterValue = (semester !== undefined && semester !== null) ? String(semester).trim() : '';
+
+        console.log('Processing mapping:', { facultyId, courseCode, role, batch: batchValue, semester: semesterValue, courseType });
 
         // Validate faculty exists with this csXXX ID
         const faculty = await User.findOne({ userId: facultyId, role: 'faculty' });
@@ -38,16 +44,25 @@ exports.createSubjectMapping = async (req, res) => {
           continue;
         }
 
-        // Check if mapping already exists
+        // Get courseType from mapping or course (course takes precedence if provided)
+        let courseTypeValue = courseType || course.type || 'UG';
+        courseTypeValue = String(courseTypeValue).trim().toUpperCase();
+        if (courseTypeValue !== 'UG' && courseTypeValue !== 'PG') {
+          courseTypeValue = course.type || 'UG'; // Fallback to course type
+        }
+
+        // Check if mapping already exists (including batch and semester)
         const existingMapping = await SubjectMapping.findOne({
           facultyId,
           courseCode,
-          role
+          role,
+          batch: batchValue,
+          semester: semesterValue
         });
 
         if (existingMapping) {
           results.failed++;
-          results.errors.push(`Mapping ${facultyId}-${courseCode}-${role} already exists`);
+          results.errors.push(`Mapping ${facultyId}-${courseCode}-${role}-${batchValue}-${semesterValue} already exists`);
           continue;
         }
 
@@ -55,10 +70,21 @@ exports.createSubjectMapping = async (req, res) => {
         const newMapping = new SubjectMapping({
           facultyId,
           courseCode,
-          role
+          role,
+          batch: batchValue,
+          semester: semesterValue,
+          courseType: courseTypeValue
         });
 
         await newMapping.save();
+        console.log('Created mapping:', {
+          facultyId,
+          courseCode,
+          role,
+          batch: newMapping.batch,
+          semester: newMapping.semester,
+          _id: newMapping._id
+        });
         results.successful++;
       } catch (err) {
         results.failed++;
@@ -86,7 +112,13 @@ exports.bulkCreateSubjectMappings = async (req, res) => {
 
     for (const mapping of mappings) {
       try {
-        const { facultyId, courseCode, role } = mapping;
+        const { facultyId, courseCode, role, batch, semester, courseType } = mapping;
+        
+        // Ensure batch and semester are strings (preserve actual values, default to empty string if undefined/null)
+        const batchValue = (batch !== undefined && batch !== null) ? String(batch).trim() : '';
+        const semesterValue = (semester !== undefined && semester !== null) ? String(semester).trim() : '';
+
+        console.log('Bulk processing mapping:', { facultyId, courseCode, role, batch: batchValue, semester: semesterValue, courseType });
 
         // Validate faculty exists
         const faculty = await User.findOne({ userId: facultyId, role: 'faculty' });
@@ -104,16 +136,25 @@ exports.bulkCreateSubjectMappings = async (req, res) => {
           continue;
         }
 
-        // Check if mapping already exists
+        // Get courseType from mapping or course (course takes precedence if provided)
+        let courseTypeValue = courseType || course.type || 'UG';
+        courseTypeValue = String(courseTypeValue).trim().toUpperCase();
+        if (courseTypeValue !== 'UG' && courseTypeValue !== 'PG') {
+          courseTypeValue = course.type || 'UG'; // Fallback to course type
+        }
+
+        // Check if mapping already exists (including batch and semester)
         const existingMapping = await SubjectMapping.findOne({
           facultyId,
           courseCode,
-          role
+          role,
+          batch: batchValue,
+          semester: semesterValue
         });
 
         if (existingMapping) {
           results.failed++;
-          results.errors.push(`Mapping ${facultyId}-${courseCode}-${role} already exists`);
+          results.errors.push(`Mapping ${facultyId}-${courseCode}-${role}-${batchValue}-${semesterValue} already exists`);
           continue;
         }
 
@@ -121,10 +162,21 @@ exports.bulkCreateSubjectMappings = async (req, res) => {
         const newMapping = new SubjectMapping({
           facultyId,
           courseCode,
-          role
+          role,
+          batch: batchValue,
+          semester: semesterValue,
+          courseType: courseTypeValue
         });
 
         await newMapping.save();
+        console.log('Bulk created mapping:', {
+          facultyId,
+          courseCode,
+          role,
+          batch: newMapping.batch,
+          semester: newMapping.semester,
+          _id: newMapping._id
+        });
         results.successful++;
       } catch (err) {
         results.failed++;
@@ -142,8 +194,26 @@ exports.bulkCreateSubjectMappings = async (req, res) => {
 // Get all subject mappings
 exports.getAllSubjectMappings = async (req, res) => {
   try {
-    const mappings = await SubjectMapping.find({}).sort({ createdAt: -1 });
-    res.status(200).json({ mappings });
+    // Explicitly select all fields including batch, semester, and courseType, use lean() for plain objects
+    const mappings = await SubjectMapping.find({})
+      .select('facultyId courseCode role batch semester courseType createdAt updatedAt')
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    // Normalize batch, semester, and courseType to always be strings (not null/undefined)
+    const normalizedMappings = mappings.map(m => ({
+      ...m,
+      batch: m.batch != null ? String(m.batch).trim() : '',
+      semester: m.semester != null ? String(m.semester).trim() : '',
+      courseType: m.courseType != null ? String(m.courseType).trim().toUpperCase() : 'UG'
+    }));
+    
+    console.log('Fetched mappings sample:', normalizedMappings.length > 0 ? {
+      total: normalizedMappings.length,
+      first: normalizedMappings[0]
+    } : 'No mappings');
+    
+    res.status(200).json({ mappings: normalizedMappings });
   } catch (error) {
     console.error('Error fetching subject mappings:', error);
     res.status(500).json({ error: error.message });

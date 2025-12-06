@@ -126,7 +126,6 @@ const Login = () => {
                 onChange={handleChange}
                 disabled={loading}
               >
-                <option value="admin">Admin</option>
                 <option value="faculty">Faculty</option>
                 <option value="hod">HOD</option>
                 <option value="coordinator">Timetable Coordinator</option>

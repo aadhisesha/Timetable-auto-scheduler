@@ -5,8 +5,6 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
-import AdminDashboard from './pages/AdminDashboard';
-import FacultyManagement from './pages/AdminDashboard/FacultyManagement';
 import FacultyDashboard from './pages/FacultyDashboard';
 import HODDashboard from './pages/HODDashboard';
 import CoordinatorDashboard from './pages/CoordinatorDashboard/index.jsx';
@@ -40,23 +38,6 @@ const App = () => {
           <Route path="/login" element={<Login />} />
           
           {/* Protected Routes */}
-          <Route
-            path="/admin-dashboard"
-            element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/faculties"
-            element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <FacultyManagement />
-              </ProtectedRoute>
-            }
-          />
-          
           <Route
             path="/faculty-dashboard"
             element={

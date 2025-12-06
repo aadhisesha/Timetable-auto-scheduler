@@ -1,7 +1,7 @@
 import React from 'react';
 import { FaUserShield, FaChalkboardTeacher, FaUserTie, FaUserGraduate } from 'react-icons/fa';
 
-const Logo = ({ className = '', size = 'default', role = 'admin' }) => {
+const Logo = ({ className = '', size = 'default', role = 'coordinator' }) => {
   const sizeClasses = {
     small: 'w-8 h-8',
     default: 'w-10 h-10',
@@ -20,11 +20,11 @@ const Logo = ({ className = '', size = 'default', role = 'admin' }) => {
         ) : isHOD ? (
           <FaUserGraduate size={size === 'small' ? 20 : size === 'large' ? 32 : 24} />
         ) : (
-          <FaUserShield size={size === 'small' ? 20 : size === 'large' ? 32 : 24} />
+          <FaChalkboardTeacher size={size === 'small' ? 20 : size === 'large' ? 32 : 24} />
         )}
       </div>
       <span className="ml-2 text-gray-900 font-semibold text-lg">
-        {isCoordinator ? 'Coordinator Dashboard' : isFaculty ? 'Faculty Dashboard' : isHOD ? 'HOD Dashboard' : 'Admin Dashboard'}
+        {isCoordinator ? 'Coordinator Dashboard' : isFaculty ? 'Faculty Dashboard' : isHOD ? 'HOD Dashboard' : 'Coordinator Dashboard'}
       </span>
     </div>
   );

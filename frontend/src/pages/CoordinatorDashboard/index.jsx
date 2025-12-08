@@ -595,8 +595,8 @@ const CoordinatorDashboard = () => {
       return {
         'Faculty ID': m.facultyId || '',
         'Faculty Name': faculty.name || '',
-        'Subject Code': m.courseCode || '',
-        'Subject Name': course.name || '',
+        'Course Code': m.courseCode || '',
+        'Course Name': course.name || '',
         'Role': m.role || '',
         'Batch': m.batch || '',
         'Semester': m.semester || '',
@@ -630,7 +630,7 @@ const CoordinatorDashboard = () => {
       ];
     });
     autoTable(doc, {
-      head: [['Faculty ID', 'Faculty Name', 'Subject Code', 'Subject Name', 'Role', 'Batch', 'Semester', 'Course Type']],
+      head: [['Faculty ID', 'Faculty Name', 'Course Code', 'Course Name', 'Role', 'Batch', 'Semester', 'Course Type']],
       body: rows
     });
     doc.save('subject_mappings.pdf');

@@ -112,8 +112,8 @@ export const facultyService = {
     return res.data;
   },
   exportSubjectMappingsAsCSV: (mappings, faculties, courses) => {
-    // Build CSV content with headers: Faculty ID, Faculty Name, Subject Code, Subject Name, Role
-    const headers = ['Faculty ID', 'Faculty Name', 'Subject Code', 'Subject Name', 'Role'];
+    // Build CSV content with headers: Faculty ID, Faculty Name, Subject Code, Subject Name, Role, Batch, Semester, Course Type
+    const headers = ['Faculty ID', 'Faculty Name', 'Course Code', 'Course Name', 'Role', 'Batch', 'Semester', 'Course Type'];
     const rows = mappings.map(m => {
       const faculty = faculties.find(f => (f.userId || f.user?.userId) === m.facultyId) || {};
       const course = courses.find(c => c.code === m.courseCode) || {};
@@ -122,7 +122,10 @@ export const facultyService = {
         faculty.name || '',
         m.courseCode || '',
         course.name || '',
-        m.role || ''
+        m.role || '',
+        m.batch || '',
+        m.semester || '',
+        m.courseType || course.type || 'UG'
       ];
     });
     const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
